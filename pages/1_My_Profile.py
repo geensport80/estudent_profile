@@ -1,5 +1,12 @@
 import streamlit as st
 import pandas as pd
+import sys
+import os
+from database import save_consultation, get_consultations_by_student, get_student_name
+
+# 🌟 เพิ่มโค้ดส่วนนี้เพื่อเชื่อมต่อและดึงฟังก์ชันมาจากไฟล์ database.py
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from database import save_consultation
 
 # 1. ตรวจสอบสิทธิ์ (ถ้ายังไม่ล็อกอิน ให้เตะกลับไปหน้า Login ทันที)
 if not st.session_state.get('logged_in'):
@@ -14,7 +21,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap');
     @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0');
     
-    /* 2. บังคับฟอนต์ Kanit เฉพาะตัวหนังสือหลักๆ (ลดการเหวี่ยงแหที่ทำให้ไอคอนพัง) */
+    /* 2. บังคับฟอนต์ Kanit เฉพาะตัวหนังสือหลักๆ */
     html, body, h1, h2, h3, h4, h5, h6, p, label, button, input, div[data-testid="stMarkdownContainer"] {
         font-family: 'Kanit', sans-serif !important;
     }
@@ -109,14 +116,12 @@ with st.sidebar:
 # 🌟 เช็คว่าใครกำลังดูหน้านี้อยู่? (กำหนด target_id)
 # ==========================================
 if st.session_state.get('role') == 'teacher':
-    # ถ้าเป็นอาจารย์ ให้ใช้รหัสเด็กที่ส่งข้ามมาจากหน้า Teacher Panel
     if 'view_student_id' in st.session_state:
         target_id = st.session_state['view_student_id']
     else:
         st.warning("⚠️ กรุณาเลือกนักศึกษาจากหน้า Teacher Panel ก่อนครับ")
         st.stop()
 else:
-    # ถ้านักศึกษาเข้ามาดูเอง ก็ใช้รหัสตัวเองปกติ
     target_id = st.session_state.get('user_id')
 
 # ==========================================
@@ -134,15 +139,29 @@ for i in range(1, 6):
         st.session_state[f'edit_t{i}'] = False
 
 # ==========================================
-# 3. สร้างระบบ Tabs ทั้ง 5
 # ==========================================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+# 3. สร้างระบบ Tabs แบบซ่อน/แสดงตามสิทธิ์
+# ==========================================
+# กำหนดรายชื่อ Tabs พื้นฐานที่ทุกคน(รวมถึงนักศึกษา)มองเห็น
+tab_names = [
     "📝 ข้อมูลพื้นฐาน", 
     "📚 ประวัติการศึกษา & TOEIC", 
     "🏆 รางวัล & ความประพฤติ", 
     "💼 การทำงาน & กิจกรรม", 
     "📂 อัปโหลดไฟล์"
-])
+]
+
+# ตรวจสอบสิทธิ์: ถ้าเป็น 'teacher' หรือ 'admin' ให้เพิ่ม Tab 6 เข้าไป
+is_staff = st.session_state.get('role') in ['teacher', 'admin']
+
+if is_staff:
+    tab_names.append("บันทึกการเข้าพบอาจารย์")
+
+# สร้าง Tabs ขึ้นมาตามจำนวนที่จัดเตรียมไว้ใน list
+tabs = st.tabs(tab_names)
+
+# แตกตัวแปรเก็บไว้ใช้งาน (Tab 1 ถึง 5 มีเสมอ)
+tab1, tab2, tab3, tab4, tab5 = tabs[0], tabs[1], tabs[2], tabs[3], tabs[4]
 
 # --- TAB 1: ข้อมูลพื้นฐาน ---
 with tab1:
@@ -344,22 +363,17 @@ with tab3:
                 st.date_input("วันที่เกิดเหตุ", key="t3_conduct_date", disabled=d3)
                 
             if st.form_submit_button("บันทึกความประพฤติ", disabled=d3):
-                # 💡 จุดนี้แหละครับที่เราจะเอาโค้ด "บันทึกลง Database" มาใส่ในสเตปต่อไป!
                 st.success("จำลองการส่งข้อมูล... (รอเชื่อมต่อฐานข้อมูล)")
                 
     # 🌟 โซนที่ 2: ส่วนแสดงประวัติ (ทั้งนักศึกษาและอาจารย์จะเห็นตรงนี้เหมือนกัน)
     st.markdown("**ประวัติที่ถูกบันทึกในระบบ:**")
     
-    # --- 💡 โซนจำลองข้อมูล (Mockup) รอการดึงข้อมูลจริงจาก Database ---
-    # ถ้าในอนาคตเราดึงข้อมูลจาก DB มาได้แล้ว เราจะเอามาเช็คตรงนี้ครับ
     has_conduct_record = False # เปลี่ยนเป็น True ถ้าเจอข้อมูลใน DB
     
     if has_conduct_record:
-        # ตัวอย่างหน้าตาถ้ามีประวัติ
         st.error("🚨 วันที่ 15/03/2026 : เข้าเรียนสายเกิน 3 ครั้ง")
     else:
         st.info("ประวัติความประพฤติ: ปกติ ไม่มีประวัติการหักคะแนน")
-    # ---------------------------------------------------------
     
     st.markdown("---")
     st.subheader("รางวัลเกียรติคุณ")
@@ -440,7 +454,6 @@ with tab5:
     st.markdown("### รูปภาพนักศึกษา (รายปี)")
     st.markdown("กรุณาอัปโหลดภาพถ่ายเต็มตัว เห็นหน้าตาชัดเจน **ชุดเครื่องแบบสถาบัน APDI เท่านั้น**")
 
-    # กำหนดสไตล์ของกล่องพรีวิวตอนที่ยังไม่ได้อัปโหลดรูป
     placeholder_style = """
         <div style='border: 2px dashed #8BB4F9; border-radius: 15px; padding: 40px; text-align: center; color: #6B7280; background-color: #F4F7FC; margin-bottom: 10px;'>
             <span style='font-size: 24px; font-family: "Material Symbols Rounded";'>image</span><br>
@@ -452,7 +465,6 @@ with tab5:
     with col_img1:
         st.markdown("<h4 style='color: #3B82F6;'>ปี 1</h4>", unsafe_allow_html=True)
         img_y1 = st.file_uploader("อัปโหลดรูปภาพ ปี 1", type=['png', 'jpg', 'jpeg'], key="t5_img_y1", disabled=d5)
-        # ถ้าระบบเจอรูปที่อัปโหลด ให้แสดงรูปภาพเต็มๆ แต่ถ้ายังไม่มี ให้แสดงกล่องพื้นที่ว่างๆ
         if img_y1 is not None:
             st.image(img_y1, use_container_width=True, caption="รูปภาพ ปี 1")
         else:
@@ -490,7 +502,6 @@ with tab5:
     
     pdf_doc = st.file_uploader("อัปโหลดเอกสารประกอบอื่นๆ (เช่น สำเนาบัตร, ใบรายงานผลการศึกษา)", type=['pdf'], key="t5_pdf_doc", disabled=d5)
     
-    # พรีวิวแจ้งเตือนว่าอัปโหลด PDF เข้ามาแล้ว
     if pdf_doc is not None:
         st.success(f"ไฟล์ '{pdf_doc.name}' พร้อมสำหรับการบันทึกเข้าสู่ระบบแล้ว")
     
@@ -504,3 +515,60 @@ with tab5:
             st.session_state['edit_t5'] = False
             st.success("อัปโหลดไฟล์สำเร็จ!")
             st.rerun()
+
+# --- TAB 6: บันทึกการเข้าพบอาจารย์ที่ปรึกษา (แสดงเฉพาะอาจารย์/แอดมิน) ---
+if is_staff:
+    tab6 = tabs[5] # ดึง Tab ที่ 6 มาใช้งาน
+    
+    with tab6:
+        st.subheader("บันทึกการเข้าพบอาจารย์ที่ปรึกษา")
+        st.markdown("กรุณากรอกรายละเอียดการเข้าพบอาจารย์ที่ปรึกษาเพื่อเก็บเป็นประวัติการให้คำปรึกษา")
+        
+        with st.form("consultation_form"):
+            topic = st.text_input("เรื่องที่เข้าพบ", placeholder="ระบุหัวข้อการเข้าพบ เช่น ปรึกษาเรื่องการลงทะเบียน", key="con_topic")
+            
+            details = st.text_area("รายละเอียดการปรึกษา", placeholder="ระบุเนื้อหาโดยสรุปของการเข้าพบ", key="con_details")
+            
+            col_name, col_year, col_term = st.columns([2, 1, 1])
+            with col_name:
+                student_full_name = get_student_name(target_id)
+                st.text_input("ชื่อ-นามสกุล นักศึกษา", value=student_full_name, disabled=True, key="con_std_name")
+                
+            with col_year:
+                year_level = st.selectbox("ชั้นปี", ["ปี 1", "ปี 2", "ปี 3", "ปี 4", "ปีอื่นๆ"], key="con_year_level")
+            with col_term:
+                academic_year = st.text_input("ปีการศึกษา", placeholder="เช่น 2568", key="con_academic_year")
+                
+            col_date, col_empty = st.columns([1, 1])
+            with col_date:
+                meeting_date = st.date_input("วันที่เข้าพบ", key="con_meeting_date")
+                
+            st.write("<br>", unsafe_allow_html=True)
+            
+            submit_consult = st.form_submit_button("บันทึกข้อมูลการเข้าพบ", use_container_width=True)
+            
+            if submit_consult:
+                if topic and academic_year:
+                    success = save_consultation(target_id, topic, details, year_level, academic_year, meeting_date)
+                    if success:
+                        st.success("บันทึกข้อมูลการเข้าพบเรียบร้อยแล้ว")
+                        st.rerun() 
+                    else:
+                        st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูล")
+                else:
+                    st.warning("กรุณากรอกข้อมูล เรื่อง และ ปีการศึกษา ให้ครบถ้วน")
+                    
+        # ==========================================
+        # 🌟 ส่วนแสดงผลตารางประวัติการเข้าพบ
+        # ==========================================
+        st.markdown("---")
+        st.subheader("ประวัติการเข้าพบอาจารย์ที่ปรึกษา")
+        
+        df_consultations = get_consultations_by_student(target_id)
+        
+        if not df_consultations.empty:
+            st.dataframe(df_consultations, use_container_width=True, hide_index=True)
+        else:
+            st.info("ยังไม่มีประวัติการเข้าพบอาจารย์ที่ปรึกษาในระบบ")
+                
+    
